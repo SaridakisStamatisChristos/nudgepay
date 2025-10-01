@@ -2,17 +2,14 @@
 
 on:
   push:
-    branches: [ main, master ]
+    push:
+    branches: ["**"]         # all branches
   pull_request:
-    branches: [ main, master ]
-
-permissions:
-  contents: read
+    branches: ["**"]         # all PR targets
 
 jobs:
-  build-test:
+  build:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:15
@@ -23,50 +20,63 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    # Run steps from repo root (since Makefile is at the root)
-    defaults:
-      run:
-        shell: bash
-        working-directory: .
-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      # Use the mapped Postgres port from the service
-      DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres
-      TZ: UTC
-      CI: "true"
-      # Example secrets (move any secrets to GitHub → Repo Settings → Secrets and variables → Actions)
-      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-      # Add other needed secrets here (example):
-      # REDIS_URL: ${{ secrets.REDIS_URL }}
-
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      BASE_URL: https://staging.nudgepay.test
+      SESSION_SECRET_REF: env://SESSION_SECRET_VALUE
+      SESSION_SECRET_VALUE: super-secret-session-key-please-rotate
+      CRON_SECRET_REF: env://CRON_SECRET_VALUE
+      CRON_SECRET_VALUE: cron-secret-rotate-me
+      CRON_HMAC_SECRET_REF: env://CRON_HMAC_SECRET_VALUE
+      CRON_HMAC_SECRET_VALUE: cron-hmac-secret-rotate-me
+      SERVICE_TOKEN_PEPPER_REF: env://SERVICE_TOKEN_PEPPER_VALUE
+      SERVICE_TOKEN_PEPPER_VALUE: pepper-rotate-me-please
+      ADMIN_PASSWORD_HASH_REF: env://ADMIN_PASSWORD_HASH_VALUE
+      ADMIN_PASSWORD_HASH_VALUE: "$2b$12$1r6i1mS8Z2s8oGJ8o3bFxe6b1F2f.9f8QF9oJfUVr0v3/Lz8aZ1Q6"
+      ADMIN_TOTP_SECRET_REF: env://ADMIN_TOTP_SECRET_VALUE
+      ADMIN_TOTP_SECRET_VALUE: JBSWY3DPEHPK3PXP
+      STRIPE_SECRET_KEY_REF: env://STRIPE_SECRET_KEY_VALUE
+      STRIPE_SECRET_KEY_VALUE: sk_test_1234567890abcdef
+      STRIPE_WEBHOOK_SECRET_REF: env://STRIPE_WEBHOOK_SECRET_VALUE
+      STRIPE_WEBHOOK_SECRET_VALUE: whsec_testsecretvalue
+      AUTOMATION_PAGERDUTY_SERVICE: nudgepay-automation
+      AUTOMATION_PAGERDUTY_ROUTING_KEY_REF: env://AUTOMATION_PAGERDUTY_ROUTING_KEY_VALUE
+      AUTOMATION_PAGERDUTY_ROUTING_KEY_VALUE: routing-key-placeholder
+      AUTOMATION_SLACK_CHANNEL: "#nudgepay-alerts"
+      AUTOMATION_SLACK_WEBHOOK_REF: env://AUTOMATION_SLACK_WEBHOOK_VALUE
+      AUTOMATION_SLACK_WEBHOOK_VALUE: https://hooks.slack.test/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+      AUTOMATION_EMAIL_RECIPIENTS: oncall@nudgepay.test
+      SECRET_ROTATION_RUNBOOK_TEMPLATE: https://runbooks.nudgepay.test/secret-rotation
+      SECRET_ROTATION_DASHBOARD_TEMPLATE: https://grafana.nudgepay.test/d/rotation
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: nudgepay/requirements.txt
 
-      - name: Install system deps (optional)
+      - name: Install dependencies
         run: |
-          sudo apt-get update -y
-          # Add OS packages here if your project needs them, otherwise keep it minimal.
+          python -m pip install --upgrade pip
+          pip install -r nudgepay/requirements.txt
 
-      - name: Make CI (fmt, lint, typecheck, tests)
+      - name: Run make ci
+        working-directory: nudgepay
         run: make ci
 
-      # (Optional) Upload pytest results or coverage artifacts
-      # - name: Upload coverage
-      #   if: success() || failure()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: coverage
-      #     path: nudgepay/htmlcov
+      - name: Apply database migrations
+        working-directory: nudgepay
+        run: alembic upgrade head
+
+      - name: Validate staging release configuration
+        working-directory: nudgepay
+        run: ENVIRONMENT=staging python -m nudgepay.scripts.validate_release
+
+      - name: Run schema rehearsal against postgres
+        working-directory: nudgepay
+        env:
+          ENVIRONMENT: staging
+        run: DATABASE_URL=$DATABASE_URL python -m nudgepay.scripts.schema_rehearsal --json
