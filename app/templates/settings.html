@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% block content %}
+<h3>Settings</h3>
+
+<article>
+  <h4>Production URLs</h4>
+  <label>Cron endpoint
+    <input id="cron" value="{{cron_url}}" readonly>
+  </label>
+  <label>Stripe webhook endpoint
+    <input id="webhook" value="{{webhook_url}}" readonly>
+  </label>
+  <button onclick="copyVal('cron')">Copy Cron URL</button>
+  <button onclick="copyVal('webhook')">Copy Webhook URL</button>
+  <p><small>Required headers: <code>X-Cron-Timestamp</code> (unix seconds) and <code>X-Cron-Signature</code> (HMAC-SHA256 of <code>&lt;timestamp&gt;.&lt;body sha256&gt;</code> using your <code>CRON_HMAC_SECRET</code>).</small></p>
+</article>
+
+<article>
+  <h4>GitHub Actions Secrets (recommended)</h4>
+  <ul>
+    <li><code>CRON_URL</code>: {{cron_url}}</li>
+    <li><code>CRON_SECRET</code>: your cron secret</li>
+  </ul>
+</article>
+
+<article>
+  <h4>Stripe CLI (local dev)</h4>
+  <pre><code>stripe listen --forward-to {{webhook_url}}</code></pre>
+  <p>Include your <code>STRIPE_WEBHOOK_SECRET</code> in env for verification.</p>
+</article>
+
+<article>
+  <h4>Send Test Email</h4>
+  <p>This sends a test message to your admin email.</p>
+  <button
+    hx-post="/settings/test-email"
+    hx-swap="outerHTML">
+    Send Test Email
+  </button>
+</article>
+
+<script>
+function copyVal(id){
+  const el = document.getElementById(id);
+  el.select(); el.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(el.value);
+}
+</script>
+{% endblock %}

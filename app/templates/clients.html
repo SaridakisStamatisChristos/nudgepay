@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block content %}
+<h3>Clients</h3>
+<form method="post" action="/clients" style="margin-bottom:1rem;">
+  {{ csrf_input(request)|safe }}
+  <input name="name" placeholder="Client name" required>
+  <input type="email" name="email" placeholder="client@email.com" required>
+  <button>Add Client</button>
+</form>
+<table role="grid">
+  <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Created</th></tr></thead>
+  <tbody>
+    {% for c in clients %}
+      <tr><td>{{c.id}}</td><td>{{c.name}}</td><td>{{c.email}}</td><td>{{c.created_at}}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
