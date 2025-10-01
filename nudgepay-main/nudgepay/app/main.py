@@ -189,7 +189,10 @@ BASE_DIR = Path(__file__).resolve().parent
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["csrf_input"] = render_csrf_input
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+_static_dir = BASE_DIR / "static"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 
 def _admin_actor(request: Request) -> str:
