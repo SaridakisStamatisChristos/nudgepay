@@ -1,31 +1,37 @@
-# Root-level Makefile
-# CI pipeline runs: format check → lint → (optional) typecheck → tests
+# Root-level Makefile that delegates into the application directory.
+# This keeps developer ergonomics aligned with the CI workflow defined in
+# `.github/workflows/ci.yml` which runs `make ci` from inside `nudgepay/`.
 
-.PHONY: ci install test lint fmt typecheck
+.PHONY: ci install lint fmt fmt-fix test typecheck help
 
-PYTHON ?= python3
-PIP    ?= python3 -m pip
+APP_DIR ?= nudgepay
 
-# Install project dependencies
+help:
+        @echo "Targets mirror those inside $(APP_DIR)/Makefile"
+        @echo "  make install   → install development dependencies"
+        @echo "  make lint      → run ruff lint checks"
+        @echo "  make fmt       → run formatting check"
+        @echo "  make fmt-fix   → auto-format source"
+        @echo "  make test      → execute pytest suite"
+        @echo "  make ci        → run the full CI pipeline"
+
 install:
-	$(PIP) install -U pip
-	$(PIP) install -r nudgepay/requirements.txt
+        $(MAKE) -C $(APP_DIR) install-dev
 
-# One-shot entry used by CI
-ci: install fmt lint typecheck test
-
-# Run tests from within the app dir so PYTHONPATH resolves local imports
-test:
-	cd nudgepay && PYTHONPATH=$$(pwd) TZ=UTC CI=true pytest -q
-
-# Lint (ruff). Adjust the path if you add more packages.
 lint:
-	ruff check nudgepay
+        $(MAKE) -C $(APP_DIR) lint
 
-# Formatting check (black)
 fmt:
-	black --check nudgepay
+        $(MAKE) -C $(APP_DIR) format
 
-# Type checking (enable when you introduce mypy/pyright)
+fmt-fix:
+        $(MAKE) -C $(APP_DIR) format-fix
+
+test:
+        $(MAKE) -C $(APP_DIR) test
+
+ci:
+        $(MAKE) -C $(APP_DIR) ci
+
 typecheck:
-	@echo "Skipping typecheck (no mypy configured)"; true
+        $(MAKE) -C $(APP_DIR) typecheck
