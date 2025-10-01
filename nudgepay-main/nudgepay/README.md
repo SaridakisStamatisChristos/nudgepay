@@ -87,6 +87,13 @@ Use `render.yaml` and configure managed secret references in the dashboard inste
 make test
 ```
 
+> **Note**
+>
+> Continuous integration focuses on deterministic checks that validate
+> configuration safety, managed secret integrations, and supporting utilities.
+> The rationale for this lighter-weight suite lives in
+> [`docs/test-suite-rationale.md`](../docs/test-suite-rationale.md).
+
 ### Test client configuration
 
 The application sets `SESSION_HTTPS_ONLY=true` even in tests so secure cookies are issued.

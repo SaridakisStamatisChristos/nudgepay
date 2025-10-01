@@ -1,0 +1,73 @@
+{% extends "base.html" %}{% block content %}
+<section>
+  <h3>Overview</h3>
+  <p>Open: <b>{{open_count}}</b> ({{open_sum}}) — Paid: <b>{{paid_count}}</b> ({{paid_sum}})</p>
+</section>
+
+<section>
+  <h4>Last 7 days</h4>
+  <p>Nudges: <b>{{totals.nudges_7d}}</b> • Paid: <b>{{totals.paid_7d}}</b></p>
+  <table role="grid">
+    <thead><tr><th>Date</th><th>Nudges</th><th>Paid</th></tr></thead>
+    <tbody>
+      {% for row in series %}
+        <tr><td>{{row.date}}</td><td>{{row.nudges}}</td><td>{{row.paid}}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h4>Quick Create</h4>
+  <details>
+    <summary>New Client</summary>
+    <form method="post" action="/clients">
+      <input name="name" placeholder="Client name" required>
+      <input type="email" name="email" placeholder="client@email.com" required>
+      <button>Create</button>
+    </form>
+  </details>
+  <details>
+    <summary>New Invoice</summary>
+    <form method="post" action="/invoices">
+      <input name="client_id" placeholder="Client ID" required>
+      <input name="number" placeholder="INV-001" required>
+      <input type="number" name="amount_cents" placeholder="e.g., 25000" required>
+      <input type="date" name="due_date" required>
+      <button>Create & Generate Pay Link</button>
+    </form>
+  </details>
+</section>
+
+<section>
+  <h4>Recent Invoices</h4>
+  <table role="grid">
+    <thead><tr><th>ID</th><th>Number</th><th>Client</th><th>Due</th><th>Status</th><th>Reminders</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for inv in invoices %}
+      <tr id="inv-{{inv.id}}">
+        <td>{{inv.id}}</td>
+        <td>{{inv.number}}</td>
+        <td>{{inv.client_id}}</td>
+        <td>{{inv.due_date}}</td>
+        <td>{{inv.status}}</td>
+        <td>
+          <button
+            hx-post="/invoices/{{inv.id}}/toggle-reminders"
+            hx-trigger="click"
+            hx-swap="none">
+            {{ "On" if inv.reminders_enabled else "Off" }}
+          </button>
+        </td>
+        <td>
+          <a href="/pay/{{inv.id}}" target="_blank">View</a>
+          {% if inv.status == "Open" %}
+          <button hx-post="/invoices/{{inv.id}}/send-nudge" hx-trigger="click" hx-swap="none">Send Nudge</button>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
