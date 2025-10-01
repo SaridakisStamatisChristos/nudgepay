@@ -1,0 +1,22 @@
+version: "3.8"
+services:
+  web:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      - DATABASE_URL=sqlite:///./nudgpay.db
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - FROM_EMAIL=no-reply@nudgepay.local
+      - STRIPE_SECRET_KEY=sk_test_xxx
+      - STRIPE_WEBHOOK_SECRET=whsec_xxx
+      - BASE_URL=http://localhost:8000
+      - SESSION_SECRET=dev_super_secret_change_me
+      - SESSION_HTTPS_ONLY=false
+      - ADMIN_EMAIL=you@example.com
+      - ADMIN_PASSWORD_HASH=$2b$12$1r6i1mS8Z2s8oGJ8o3bFxe6b1F2f.9f8QF9oJfUVr0v3/Lz8aZ1Q6
+      - CRON_SECRET=dev_cron_key_change_me
+    depends_on: [mailhog]
+  mailhog:
+    image: mailhog/mailhog
+    ports: ["8025:8025"]

@@ -1,0 +1,30 @@
+{
+  "object_storage": {
+    "description": "Promote replicated object storage buckets when the primary region is unavailable.",
+    "regions": ["us-east-1", "us-west-2", "eu-central-1"],
+    "steps": [
+      "Promote replica bucket in {region} by updating S3 replication status to active",
+      "Invalidate CDN caches that reference the {backend} bucket to ensure edge refresh",
+      "Rotate application configuration to point at the {region} object storage endpoint",
+      "Trigger scripts/verify_backup.sh against the promoted bucket snapshot"
+    ],
+    "validation": [
+      "python -m nudgepay.scripts.storage_failover --backend {backend} --region {region} --json",
+      "aws s3api head-object --bucket nudgepay-{region} --key manifests/latest.json"
+    ]
+  },
+  "analytics_warehouse": {
+    "description": "Restore the replicated analytics warehouse when the primary dataset is unavailable.",
+    "regions": ["us-east-1", "us-west-2"],
+    "steps": [
+      "Promote read replica cluster in {region} to accept writes",
+      "Re-point ETL jobs to {region} and pause ingestion in the primary region",
+      "Replay incremental manifests from object storage to hydrate the promoted cluster",
+      "Run dbt test --profiles-dir ops/dbt to validate restored models"
+    ],
+    "validation": [
+      "python -m nudgepay.scripts.storage_failover --backend {backend} --region {region} --json",
+      "psql $ANALYTICS_URL -c 'select count(*) from etl_run where status = \"success\"'"
+    ]
+  }
+}

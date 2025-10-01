@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: nudgepay
+    env: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: BASE_URL
+        value: https://nudgepay.onrender.com
+      - key: DATABASE_URL
+        value: sqlite:////opt/render/project/src/nudgpay.db
+      - key: SESSION_HTTPS_ONLY
+        value: "true"
+      - key: SESSION_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+    healthCheckPath: /
