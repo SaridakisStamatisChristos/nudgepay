@@ -1,17 +1,18 @@
-name: CI
+      name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - main
+    branches: [ main, master ]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build and test
+  build-test:
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:15
@@ -26,61 +27,46 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
+    # Run steps from repo root (since Makefile is at the root)
     defaults:
       run:
         shell: bash
-        working-directory: nudgepay
+        working-directory: .
+
     env:
-      ENVIRONMENT: staging
-      BASE_URL: https://ci.nudgepay.dev
-      SESSION_HTTPS_ONLY: "true"
-      SESSION_SECRET: staging-session-secret-should-be-long-0123456789
-      SESSION_SECRET_REF: env://SESSION_SECRET
-      CRON_SECRET: staging-cron-secret-12345
-      CRON_SECRET_REF: env://CRON_SECRET
-      CRON_HMAC_SECRET: staging-cron-hmac-secret-1234567890
-      CRON_HMAC_SECRET_REF: env://CRON_HMAC_SECRET
-      SERVICE_TOKEN_PEPPER: staging-service-token-pepper-0123456789012345
-      SERVICE_TOKEN_PEPPER_REF: env://SERVICE_TOKEN_PEPPER
-      ADMIN_PASSWORD_HASH: $2b$12$40bxnZrXLdU7wJvUA89Do.ObF8CSgTQ4V4fAGJLLH8dAmQczfcJmm
-      ADMIN_PASSWORD_HASH_REF: env://ADMIN_PASSWORD_HASH
-      ADMIN_TOTP_SECRET: JBSWY3DPEHPK3PXP
-      ADMIN_TOTP_SECRET_REF: env://ADMIN_TOTP_SECRET
-      CSRF_SECRET: staging-csrf-secret-value-should-be-long-123456789
-      CSRF_SECRET_REF: env://CSRF_SECRET
-      STRIPE_SECRET_KEY: sk_test_1234567890abcdefghijklmn
-      STRIPE_SECRET_KEY_REF: env://STRIPE_SECRET_KEY
-      STRIPE_WEBHOOK_SECRET: whsec_test_secret_1234567890
-      STRIPE_WEBHOOK_SECRET_REF: env://STRIPE_WEBHOOK_SECRET
+      # Use the mapped Postgres port from the service
       DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres
+      TZ: UTC
+      CI: "true"
+      # Example secrets (move any secrets to GitHub → Repo Settings → Secrets and variables → Actions)
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      # Add other needed secrets here (example):
+      # REDIS_URL: ${{ secrets.REDIS_URL }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Determine Python version
-        id: python-version
-        run: |
-          PY_VERSION=$(grep -E '^python==[0-9]+(\.[0-9]+)*' requirements.txt | head -n 1 | cut -d= -f3-)
-          if [ -z "$PY_VERSION" ]; then
-            PY_VERSION="3.11"
-            echo "No python== pin found in requirements.txt; defaulting to ${PY_VERSION}" >&2
-          fi
-          echo "version=${PY_VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ steps.python-version.outputs.version }}
-          cache: pip
+          python-version: "3.11"
+          cache: "pip"
           cache-dependency-path: nudgepay/requirements.txt
 
-      - name: Install dependencies
+      - name: Install system deps (optional)
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          sudo apt-get update -y
+          # Add OS packages here if your project needs them, otherwise keep it minimal.
 
-      - name: Prepare static assets directory
-        run: mkdir -p app/static
-
-      - name: Run CI checks
+      - name: Make CI (fmt, lint, typecheck, tests)
         run: make ci
+
+      # (Optional) Upload pytest results or coverage artifacts
+      # - name: Upload coverage
+      #   if: success() || failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage
+      #     path: nudgepay/htmlcov
