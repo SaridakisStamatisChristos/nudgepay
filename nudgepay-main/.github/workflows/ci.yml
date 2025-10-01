@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["**"]   # all branches
+    branches: ["**"]          # all branches
   pull_request:
-    branches: ["**"]
+    branches: ["**"]          # all PR targets
 
 permissions:
   contents: read
@@ -28,20 +28,20 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    # Run all shell steps from the app folder
+    # All shell steps run from the app directory
     defaults:
       run:
         shell: bash
         working-directory: nudgepay
 
+    # Job-wide environment
     env:
-      # Use the mapped port from the Postgres service (avoids collisions)
+      # Use the service-mapped port to avoid collisions
       DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres
       TZ: UTC
       CI: "true"
 
-      # Move real secrets to GitHub Actions → Secrets and reference them here.
-      # The *_REF envs are fine if your app resolves env://… URIs.
+      # Secrets — define them in GitHub → Settings → Secrets and variables → Actions
       SESSION_SECRET_REF: env://SESSION_SECRET_VALUE
       SESSION_SECRET_VALUE: ${{ secrets.SESSION_SECRET_VALUE }}
       CRON_SECRET_REF: env://CRON_SECRET_VALUE
@@ -78,19 +78,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: |
-            nudgepay/requirements.txt
+          cache-dependency-path: nudgepay/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      - name: Run CI (fmt, lint, typecheck, tests)
+      - name: Run CI (lint, tests, security, release checks)
         run: make ci
 
-      - name: Apply database migrations
-        # simple retry in case PG is still getting healthy
+      - name: Apply database migrations (retry until Postgres healthy)
         run: |
           for i in {1..10}; do
             alembic upgrade head && s=0 && break || s=$?
@@ -102,8 +100,15 @@ jobs:
       - name: Validate staging release configuration
         run: ENVIRONMENT=staging python -m nudgepay.scripts.validate_release
 
-      - name: Run schema rehearsal against postgres
+      - name: Run schema rehearsal against Postgres
         env:
           ENVIRONMENT: staging
         run: python -m nudgepay.scripts.schema_rehearsal --json
 
+      # Optional: upload artifacts (coverage, junit, etc.)
+      # - name: Upload coverage
+      #   if: success() || failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage
+      #     path: htmlcov
