@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block content %}
+<article>
+  <h3>Invoice {{inv.number}}</h3>
+  <p>Amount: <b>{{inv.amount_cents/100}} {{inv.currency.upper()}}</b></p>
+  <p>Due: {{inv.due_date}}</p>
+  {% if pay_url and pay_url != "#" %}
+    <p><a href="{{pay_url}}">Pay securely</a></p>
+  {% else %}
+    <p><em>Payment link not yet generated.</em></p>
+  {% endif %}
+</article>
+{% endblock %}
