@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Simple sanity checks for CI environments that expect a configure script.
+# The script validates prerequisites instead of performing heavy setup.
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ ! -d "${ROOT_DIR}/nudgepay" ]]; then
+  echo "configure: expected application sources in \"nudgepay\"" >&2
+  exit 1
+fi
+
+command -v python3 >/dev/null 2>&1 || {
+  echo "configure: python3 is required" >&2
+  exit 1
+}
+
+PY_VERSION="$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
+REQUIRED_MAJOR=3
+REQUIRED_MINOR=11
+
+IFS='.' read -r MAJOR MINOR <<<"$PY_VERSION"
+if (( MAJOR < REQUIRED_MAJOR )) || { (( MAJOR == REQUIRED_MAJOR )) && (( MINOR < REQUIRED_MINOR )); }; then
+  echo "configure: python3 >= ${REQUIRED_MAJOR}.${REQUIRED_MINOR} is required (found ${PY_VERSION})" >&2
+  exit 1
+fi
+
+echo "configure: prerequisites satisfied (python ${PY_VERSION})"
