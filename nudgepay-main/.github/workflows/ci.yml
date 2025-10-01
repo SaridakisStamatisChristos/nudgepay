@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        shell: bash
+        working-directory: nudgepay
+    env:
+      ENVIRONMENT: staging
+      BASE_URL: https://ci.nudgepay.dev
+      SESSION_HTTPS_ONLY: "true"
+      SESSION_SECRET: staging-session-secret-should-be-long-0123456789
+      SESSION_SECRET_REF: env://SESSION_SECRET
+      CRON_SECRET: staging-cron-secret-12345
+      CRON_SECRET_REF: env://CRON_SECRET
+      CRON_HMAC_SECRET: staging-cron-hmac-secret-1234567890
+      CRON_HMAC_SECRET_REF: env://CRON_HMAC_SECRET
+      SERVICE_TOKEN_PEPPER: staging-service-token-pepper-0123456789012345
+      SERVICE_TOKEN_PEPPER_REF: env://SERVICE_TOKEN_PEPPER
+      ADMIN_PASSWORD_HASH: $2b$12$40bxnZrXLdU7wJvUA89Do.ObF8CSgTQ4V4fAGJLLH8dAmQczfcJmm
+      ADMIN_PASSWORD_HASH_REF: env://ADMIN_PASSWORD_HASH
+      ADMIN_TOTP_SECRET: JBSWY3DPEHPK3PXP
+      ADMIN_TOTP_SECRET_REF: env://ADMIN_TOTP_SECRET
+      CSRF_SECRET: staging-csrf-secret-value-should-be-long-123456789
+      CSRF_SECRET_REF: env://CSRF_SECRET
+      STRIPE_SECRET_KEY: sk_test_1234567890abcdefghijklmn
+      STRIPE_SECRET_KEY_REF: env://STRIPE_SECRET_KEY
+      STRIPE_WEBHOOK_SECRET: whsec_test_secret_1234567890
+      STRIPE_WEBHOOK_SECRET_REF: env://STRIPE_WEBHOOK_SECRET
+      DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine Python version
+        id: python-version
+        run: |
+          PY_VERSION=$(grep -E '^python==[0-9]+(\.[0-9]+)*' requirements.txt | head -n 1 | cut -d= -f3-)
+          if [ -z "$PY_VERSION" ]; then
+            PY_VERSION="3.11"
+            echo "No python== pin found in requirements.txt; defaulting to ${PY_VERSION}" >&2
+          fi
+          echo "version=${PY_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.python-version.outputs.version }}
+          cache: pip
+          cache-dependency-path: nudgepay/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Prepare static assets directory
+        run: mkdir -p app/static
+
+      - name: Run CI checks
+        run: make ci
