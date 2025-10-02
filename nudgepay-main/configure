@@ -1,28 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Simple sanity checks for CI environments that expect a configure script.
-# The script validates prerequisites instead of performing heavy setup.
+# Lightweight configure script intended for CI/CD systems that expect a
+# `./configure` entry-point.  The script performs fast pre-flight checks and
+# gives actionable guidance when something is missing.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${ROOT_DIR}/nudgepay"
 
-if [[ ! -d "${ROOT_DIR}/nudgepay" ]]; then
+usage() {
+  cat <<'EOF'
+Usage: ./configure [--help]
+
+Validates that required tooling is available to run the NudgePay application
+and its CI entrypoints.  No files are modified.
+EOF
+}
+
+if [[ ${1:-} == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ ! -d "${APP_DIR}" ]]; then
   echo "configure: expected application sources in \"nudgepay\"" >&2
   exit 1
 fi
 
-command -v python3 >/dev/null 2>&1 || {
-  echo "configure: python3 is required" >&2
-  exit 1
+require_command() {
+  local name="$1"
+  if ! command -v "$name" >/dev/null 2>&1; then
+    echo "configure: missing required command: $name" >&2
+    exit 1
+  fi
 }
 
-PY_VERSION="$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
-REQUIRED_MAJOR=3
-REQUIRED_MINOR=11
+PYTHON_BIN="${PYTHON:-python3}"
+require_command "$PYTHON_BIN"
+require_command pip3
+require_command make
 
-IFS='.' read -r MAJOR MINOR <<<"$PY_VERSION"
+PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+REQUIRED_MAJOR=3
+REQUIRED_MINOR=10
+
+IFS='.' read -r MAJOR MINOR _ <<<"$PY_VERSION"
 if (( MAJOR < REQUIRED_MAJOR )) || { (( MAJOR == REQUIRED_MAJOR )) && (( MINOR < REQUIRED_MINOR )); }; then
-  echo "configure: python3 >= ${REQUIRED_MAJOR}.${REQUIRED_MINOR} is required (found ${PY_VERSION})" >&2
+  echo "configure: python >= ${REQUIRED_MAJOR}.${REQUIRED_MINOR} is required (found ${PY_VERSION})" >&2
+  exit 1
+fi
+
+# Verify that the CI entrypoint is wired correctly so users do not discover it
+# only after kicking off a long-running job.
+if ! make --directory "$APP_DIR" --just-print ci >/dev/null 2>&1; then
+  echo "configure: unable to evaluate 'make ci' in ${APP_DIR}" >&2
   exit 1
 fi
 
