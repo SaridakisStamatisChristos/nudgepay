@@ -27,7 +27,7 @@ run:
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 test:
-	PYTHONPATH=$$(pwd) TZ=UTC CI=true pytest -q
+	PYTHONPATH=$$(pwd):$$(pwd)/.. TZ=UTC CI=true pytest -q
 
 lint:
 	ruff check .
@@ -42,7 +42,7 @@ format-fix:
 
 security-scan:
 	bandit -q -r app
-	pip-audit
+	PYTHONPATH=$$(pwd):$$(pwd)/.. python -m nudgepay.scripts.security_scan
 
 docker-build:
 	docker build -t nudgepay:latest .
@@ -67,10 +67,10 @@ ci:
 	$(MAKE) lint
 	$(MAKE) test
 	$(MAKE) security-scan
-	ENVIRONMENT=staging python -m nudgepay.scripts.validate_release
-	ENVIRONMENT=staging DATABASE_URL='$(DATABASE_URL)' python -m nudgepay.scripts.schema_rehearsal --json
+	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging python -m nudgepay.scripts.ci_validate_release
+	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging DATABASE_URL='$(DATABASE_URL)' python -m nudgepay.scripts.ci_schema_rehearsal --json
 
 release-check:
-	ENVIRONMENT=staging python -m nudgepay.scripts.validate_release
-	ENVIRONMENT=staging DATABASE_URL='$(DATABASE_URL)' python -m nudgepay.scripts.schema_rehearsal --json
+	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging python -m nudgepay.scripts.ci_validate_release
+	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging DATABASE_URL='$(DATABASE_URL)' python -m nudgepay.scripts.ci_schema_rehearsal --json
 
