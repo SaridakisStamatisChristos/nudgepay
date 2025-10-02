@@ -37,8 +37,13 @@ require_command() {
 
 PYTHON_BIN="${PYTHON:-python3}"
 require_command "$PYTHON_BIN"
-require_command pip3
 require_command make
+
+if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+  echo "configure: missing required python module: pip" >&2
+  echo "  tried running: $PYTHON_BIN -m pip --version" >&2
+  exit 1
+fi
 
 PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
 REQUIRED_MAJOR=3
