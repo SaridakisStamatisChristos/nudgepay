@@ -63,7 +63,7 @@ backup:
 	bash scripts/backup.sh
 
 # ---- CI entrypoints ----
-ci:
+ci: install-dev
 	$(MAKE) lint
 	$(MAKE) test
 	$(MAKE) security-scan
