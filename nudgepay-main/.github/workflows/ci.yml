@@ -81,9 +81,7 @@ jobs:
           cache-dependency-path: nudgepay/requirements.txt
 
       - name: Install dependencies
-        run: |
-          python -m pip install -U pip
-          pip install -r requirements.txt
+        run: make install-dev
 
       - name: Run CI (lint, tests, security, release checks)
         run: make ci

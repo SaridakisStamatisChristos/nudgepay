@@ -55,8 +55,13 @@ if (( MAJOR < REQUIRED_MAJOR )) || { (( MAJOR == REQUIRED_MAJOR )) && (( MINOR <
   exit 1
 fi
 
-# Verify that the CI entrypoint is wired correctly so users do not discover it
-# only after kicking off a long-running job.
+# Verify that the CI entrypoints are wired correctly so users do not discover
+# issues only after kicking off a long-running job.
+if ! make --directory "$APP_DIR" --just-print install-dev >/dev/null 2>&1; then
+  echo "configure: unable to evaluate 'make install-dev' in ${APP_DIR}" >&2
+  exit 1
+fi
+
 if ! make --directory "$APP_DIR" --just-print ci >/dev/null 2>&1; then
   echo "configure: unable to evaluate 'make ci' in ${APP_DIR}" >&2
   exit 1
