@@ -23,6 +23,7 @@ from .audit import record_admin_event
 from .config import Settings, get_settings, normalize_base32_secret
 from .db import get_session
 from .models import AdminUser
+from .metrics import record_login_attempt, record_login_throttle
 from .security import LoginThrottle
 
 logger = logging.getLogger(__name__)
@@ -287,6 +288,13 @@ def _throttle_key(request: Request, email: str) -> str:
     return f"{email.strip().lower()}::{_client_ip(request)}"
 
 
+def _register_failure_metrics(key: str, *, result: str, factor: str) -> None:
+    blocked = _login_throttle.register_failure(key)
+    record_login_attempt(result, factor=factor)
+    if blocked:
+        record_login_throttle("blocked", retry_after=_login_throttle.retry_after(key))
+
+
 def login(
     request: Request,
     email: str,
@@ -300,6 +308,8 @@ def login(
 
     normalized_email = email.strip().lower()
     key = _throttle_key(request, normalized_email)
+    hardware_required = False
+    totp_required = False
 
     record_admin_event(
         "auth.login_attempt",
@@ -313,6 +323,8 @@ def login(
 
     if _login_throttle.is_blocked(key):
         retry_after = _login_throttle.retry_after(key)
+        record_login_throttle("rate_limited", retry_after=retry_after)
+        record_login_attempt("rate_limited", factor="throttle")
         logger.warning("Login blocked for %s from %s", normalized_email, _client_ip(request))
         record_admin_event(
             "auth.login_rate_limited",
@@ -340,7 +352,7 @@ def login(
 
     if admin_record is None:
         if normalized_email != settings.admin_email.strip().lower():
-            _login_throttle.register_failure(key)
+            _register_failure_metrics(key, result="unknown_account", factor="account")
             logger.info("Admin login failed for %s", normalized_email)
             _record_login_failure(
                 request,
@@ -351,7 +363,7 @@ def login(
             return LoginResult(False, "Invalid credentials")
 
         if not verify_password_hash(settings.admin_password_hash, password):
-            _login_throttle.register_failure(key)
+            _register_failure_metrics(key, result="invalid_credentials", factor="password")
             logger.info("Admin login failed for %s", normalized_email)
             _record_login_failure(
                 request,
@@ -362,13 +374,19 @@ def login(
             return LoginResult(False, "Invalid credentials")
 
         totp_secret = settings.admin_totp_secret or None
+        totp_required = bool(totp_secret)
         session_permissions = ["*"]
         session_role = "superadmin"
-        if settings.admin_hardware_fingerprints:
+        hardware_required = bool(settings.admin_hardware_fingerprints)
+        if hardware_required:
             normalized_assertion = (hardware_assertion or "").strip().lower()
             allowed = {fingerprint.strip().lower() for fingerprint in settings.admin_hardware_fingerprints if fingerprint}
             if normalized_assertion not in allowed:
-                _login_throttle.register_failure(key)
+                _register_failure_metrics(
+                    key,
+                    result="hardware_assertion_required",
+                    factor="hardware",
+                )
                 logger.info(
                     "Admin login failed due to missing hardware assertion for %s", normalized_email
                 )
@@ -381,7 +399,7 @@ def login(
                 return LoginResult(False, "Hardware security key required")
     else:
         if not verify_password_hash(admin_record.password_hash, password):
-            _login_throttle.register_failure(key)
+            _register_failure_metrics(key, result="invalid_credentials", factor="password")
             logger.info("Admin login failed for %s", normalized_email)
             _record_login_failure(
                 request,
@@ -391,11 +409,17 @@ def login(
             )
             return LoginResult(False, "Invalid credentials")
         totp_secret = admin_record.totp_secret
+        totp_required = bool(totp_secret)
         session_permissions = list(admin_record.permissions or [])
         session_role = admin_record.role
+        hardware_required = bool(admin_record.hardware_key_fingerprints)
 
         if not identity.verify_hardware_assertion(admin_record, hardware_assertion):
-            _login_throttle.register_failure(key)
+            _register_failure_metrics(
+                key,
+                result="hardware_assertion_required",
+                factor="hardware",
+            )
             logger.info("Admin login failed due to missing hardware assertion for %s", normalized_email)
             _record_login_failure(
                 request,
@@ -406,7 +430,7 @@ def login(
             return LoginResult(False, "Hardware security key required")
 
     if not _verify_totp(totp_code, override_secret=totp_secret):
-        _login_throttle.register_failure(key)
+        _register_failure_metrics(key, result="invalid_totp", factor="totp")
         logger.info("Admin login failed due to invalid TOTP for %s", normalized_email)
         _record_login_failure(
             request,
@@ -417,6 +441,11 @@ def login(
         return LoginResult(False, "Invalid authentication code")
 
     _login_throttle.reset(key)
+    record_login_throttle("reset")
+    success_factor = "password_totp" if totp_required else "password_only"
+    if hardware_required:
+        success_factor = f"{success_factor}_hardware"
+    record_login_attempt("success", factor=success_factor)
     request.session["authed"] = True
     request.session["admin_email"] = normalized_email
     request.session["authenticated_at"] = datetime.now(tz=UTC).isoformat()

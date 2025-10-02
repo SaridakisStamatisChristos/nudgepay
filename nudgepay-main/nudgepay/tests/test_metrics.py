@@ -7,6 +7,12 @@ from sqlmodel import delete
 from app.admins import ensure_admin
 from app.db import init_db, session_scope
 from app.main import app
+from app.metrics import (
+    configure_metrics,
+    disable_metrics,
+    record_login_attempt,
+    record_login_throttle,
+)
 from app.models import AdminUser, Client, Invoice, ProcessedWebhook, ReminderLog, User
 
 
@@ -112,3 +118,22 @@ def test_metrics_endpoint_reports_service_counters(monkeypatch):
     assert 'route="/healthz"' in payload
     assert 'nudgepay_reminders_total{stage="manual",status="sent"}' in payload
     assert 'nudgepay_payments_total{source="stripe_webhook"}' in payload
+
+
+def test_login_metrics_render_without_prometheus():
+    recorder = configure_metrics("test")
+    try:
+        record_login_attempt("success", factor="password")
+        record_login_attempt("invalid_credentials", factor="password")
+        record_login_throttle("blocked", retry_after=30)
+        record_login_throttle("reset")
+        payload = recorder.render()
+    finally:
+        disable_metrics()
+
+    assert "test_login_attempts_total" in payload
+    assert 'test_login_attempts_total{factor="password",result="success"}' in payload
+    assert 'test_login_attempts_total{factor="password",result="invalid_credentials"}' in payload
+    assert 'test_login_throttle_events_total{event="blocked"}' in payload
+    assert 'test_login_throttle_events_total{event="reset"}' in payload
+    assert "test_login_throttle_retry_seconds_bucket" in payload
