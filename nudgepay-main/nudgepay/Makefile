@@ -2,7 +2,7 @@
 SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-.PHONY: run test lint format format-fix security-scan docker-build docker-up deploy-fly hash migrate backup ci release-check install-dev
+.PHONY: run test lint format format-fix security-scan docker-build docker-up deploy-fly hash migrate backup ci release-check install-dev check
 
 PYTHON ?= python3
 PIP    ?= python3 -m pip
@@ -73,4 +73,6 @@ ci:
 release-check:
 	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging python -m nudgepay.scripts.ci_validate_release
 	PYTHONPATH=$$(pwd):$$(pwd)/.. ENVIRONMENT=staging DATABASE_URL='$(DATABASE_URL)' python -m nudgepay.scripts.ci_schema_rehearsal --json
+
+check: ci
 

@@ -2,7 +2,7 @@
 # This keeps developer ergonomics aligned with the CI workflow defined in
 # `.github/workflows/ci.yml` which runs `make ci` from inside `nudgepay/`.
 
-.PHONY: ci install lint fmt fmt-fix test typecheck help
+.PHONY: ci install lint fmt fmt-fix test typecheck help check
 
 APP_DIR ?= nudgepay
 
@@ -13,6 +13,7 @@ help:
 	@echo "  make fmt       → run formatting check"
 	@echo "  make fmt-fix   → auto-format source"
 	@echo "  make test      → execute pytest suite"
+	@echo "  make check     → run the default CI check pipeline"
 	@echo "  make ci        → run the full CI pipeline"
 
 install:
@@ -35,3 +36,6 @@ ci:
 
 typecheck:
 	$(MAKE) -C $(APP_DIR) typecheck
+
+check:
+	$(MAKE) -C $(APP_DIR) check
