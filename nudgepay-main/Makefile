@@ -7,31 +7,31 @@
 APP_DIR ?= nudgepay
 
 help:
-        @echo "Targets mirror those inside $(APP_DIR)/Makefile"
-        @echo "  make install   → install development dependencies"
-        @echo "  make lint      → run ruff lint checks"
-        @echo "  make fmt       → run formatting check"
-        @echo "  make fmt-fix   → auto-format source"
-        @echo "  make test      → execute pytest suite"
-        @echo "  make ci        → run the full CI pipeline"
+	@echo "Targets mirror those inside $(APP_DIR)/Makefile"
+	@echo "  make install   → install development dependencies"
+	@echo "  make lint      → run ruff lint checks"
+	@echo "  make fmt       → run formatting check"
+	@echo "  make fmt-fix   → auto-format source"
+	@echo "  make test      → execute pytest suite"
+	@echo "  make ci        → run the full CI pipeline"
 
 install:
-        $(MAKE) -C $(APP_DIR) install-dev
+	$(MAKE) -C $(APP_DIR) install-dev
 
 lint:
-        $(MAKE) -C $(APP_DIR) lint
+	$(MAKE) -C $(APP_DIR) lint
 
 fmt:
-        $(MAKE) -C $(APP_DIR) format
+	$(MAKE) -C $(APP_DIR) format
 
 fmt-fix:
-        $(MAKE) -C $(APP_DIR) format-fix
+	$(MAKE) -C $(APP_DIR) format-fix
 
 test:
-        $(MAKE) -C $(APP_DIR) test
+	$(MAKE) -C $(APP_DIR) test
 
 ci:
-        $(MAKE) -C $(APP_DIR) ci
+	$(MAKE) -C $(APP_DIR) ci
 
 typecheck:
-        $(MAKE) -C $(APP_DIR) typecheck
+	$(MAKE) -C $(APP_DIR) typecheck
