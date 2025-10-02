@@ -67,12 +67,16 @@ class LoginThrottle:
             self._redis = None
             return False
 
-    def register_failure(self, key: str) -> None:
-        """Record a failed login attempt for ``key``."""
+    def register_failure(self, key: str) -> bool:
+        """Record a failed login attempt for ``key``.
+
+        Returns ``True`` when the failure triggered a throttle block.
+        """
 
         now = time.time()
         if self._register_failure_redis(key, now):
-            return
+            redis_block = self._check_block_redis(key)
+            return bool(redis_block)
 
         window = self._get_state(key)
         with self._lock:
@@ -80,6 +84,8 @@ class LoginThrottle:
             window.attempts.append(now)
             if len(window.attempts) >= self._limit:
                 window.blocked_until = now + self._block
+                return True
+        return False
 
     def reset(self, key: str) -> None:
         """Clear rate limit counters for ``key`` after successful authentication."""

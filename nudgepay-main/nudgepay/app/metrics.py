@@ -73,6 +73,16 @@ class _NullMetrics:
     ) -> None:  # pragma: no cover - noop
         return
 
+    def record_login_attempt(
+        self, *_: object, **__: object
+    ) -> None:  # pragma: no cover - noop
+        return
+
+    def record_login_throttle(
+        self, *_: object, **__: object
+    ) -> None:  # pragma: no cover - noop
+        return
+
     def render(self) -> str:  # pragma: no cover - noop
         return ""
 
@@ -129,6 +139,25 @@ class _PrometheusMetrics:
                 labelnames=("breaker", "state"),
                 registry=self.registry,
             )
+            self.login_attempt_counter = Counter(
+                f"{prefix}_login_attempts_total",
+                "Administrative login attempts by result and factor.",
+                labelnames=("result", "factor"),
+                registry=self.registry,
+            )
+            self.login_throttle_counter = Counter(
+                f"{prefix}_login_throttle_events_total",
+                "Login throttle lifecycle events.",
+                labelnames=("event",),
+                registry=self.registry,
+            )
+            self.login_throttle_retry = Histogram(
+                f"{prefix}_login_throttle_retry_seconds",
+                "Histogram of retry-after durations produced by the login throttle.",
+                labelnames=("event",),
+                registry=self.registry,
+                buckets=(1, 5, 15, 30, 60, 120, 300, 900, 1800, 3600),
+            )
         else:
             self.registry = None
             self.http_counter = _CounterStorage()
@@ -142,6 +171,11 @@ class _PrometheusMetrics:
             self.automation_counter = _CounterStorage()
             self.automation_metric_counter = _CounterStorage()
             self.breaker_counter = _CounterStorage()
+            self.login_attempt_counter = _CounterStorage()
+            self.login_throttle_counter = _CounterStorage()
+            self.login_throttle_retry = _HistogramStorage(
+                (1, 5, 15, 30, 60, 120, 300, 900, 1800, float("inf"))
+            )
 
     @staticmethod
     def _create_registry() -> CollectorRegistry:
@@ -205,6 +239,27 @@ class _PrometheusMetrics:
         else:
             self.breaker_counter.inc((label_breaker, label_state))
 
+    def record_login_attempt(self, result: str, factor: str) -> None:
+        normalized_result = result or "unknown"
+        normalized_factor = factor or "none"
+        if _PROMETHEUS_AVAILABLE:
+            self.login_attempt_counter.labels(normalized_result, normalized_factor).inc()
+        else:
+            self.login_attempt_counter.inc((normalized_result, normalized_factor))
+
+    def record_login_throttle(
+        self, event: str, retry_after: float | None
+    ) -> None:
+        label_event = event or "unknown"
+        if _PROMETHEUS_AVAILABLE:
+            self.login_throttle_counter.labels(label_event).inc()
+            if retry_after is not None:
+                self.login_throttle_retry.labels(label_event).observe(max(retry_after, 0.0))
+        else:
+            self.login_throttle_counter.inc((label_event,))
+            if retry_after is not None:
+                self.login_throttle_retry.observe((label_event,), max(retry_after, 0.0))
+
     def render(self) -> str:
         if _PROMETHEUS_AVAILABLE:
             return generate_latest(self.registry).decode("utf-8")
@@ -249,6 +304,21 @@ class _PrometheusMetrics:
                 "nudgepay_circuit_breaker_events_total",
                 "Circuit breaker transitions by state.",
                 ("breaker", "state"),
+            ),
+            self.login_attempt_counter.describe(
+                "nudgepay_login_attempts_total",
+                "Administrative login attempts by result and factor.",
+                ("result", "factor"),
+            ),
+            self.login_throttle_counter.describe(
+                "nudgepay_login_throttle_events_total",
+                "Login throttle lifecycle events.",
+                ("event",),
+            ),
+            self.login_throttle_retry.describe(
+                "nudgepay_login_throttle_retry_seconds",
+                "Histogram of retry-after durations produced by the login throttle.",
+                ("event",),
             ),
         ]
         return "\n".join(section for section in sections if section) + "\n"
@@ -430,6 +500,35 @@ def record_circuit_breaker(breaker: str, state: str) -> None:
     _EXPORTER.export(export_payload)
 
 
+def record_login_attempt(result: str, *, factor: str | None = None) -> None:
+    normalized_result = _normalize_label(result)
+    normalized_factor = _normalize_label(factor, fallback="none")
+    _metrics.record_login_attempt(normalized_result, normalized_factor)
+    export_payload = {
+        "type": "login_attempt",
+        "result": normalized_result,
+        "factor": normalized_factor,
+    }
+    _EXPORTER.export(export_payload)
+
+
+def record_login_throttle(
+    event: str, *, retry_after: float | None = None
+) -> None:
+    normalized_event = _normalize_label(event)
+    bounded_retry = None
+    if retry_after is not None:
+        bounded_retry = max(float(retry_after), 0.0)
+    _metrics.record_login_throttle(normalized_event, bounded_retry)
+    export_payload = {
+        "type": "login_throttle",
+        "event": normalized_event,
+    }
+    if bounded_retry is not None:
+        export_payload["retry_after"] = bounded_retry
+    _EXPORTER.export(export_payload)
+
+
 def setup_metrics(app, *, enabled: bool, endpoint: str, prefix: str) -> None:
     if getattr(app.state, "metrics_configured", False):
         return
@@ -457,6 +556,8 @@ __all__ = [
     "record_automation_job",
     "record_payment",
     "record_reminder",
+    "record_login_attempt",
+    "record_login_throttle",
     "record_circuit_breaker",
     "setup_metrics",
 ]
