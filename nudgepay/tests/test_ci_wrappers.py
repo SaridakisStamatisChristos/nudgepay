@@ -85,7 +85,7 @@ def test_ci_validate_release_uses_defaults(monkeypatch: pytest.MonkeyPatch, caps
     assert payload["errors"] == []
 
 
-def test_ci_schema_rehearsal_skips_when_db_unavailable(
+def test_ci_schema_rehearsal_fails_when_db_unavailable(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "staging")
@@ -94,7 +94,7 @@ def test_ci_schema_rehearsal_skips_when_db_unavailable(
         ci_schema_rehearsal, "rehearse_schema", lambda **_: (_ for _ in ()).throw(SchemaLifecycleError("upgrade", "head", error)))
 
     exit_code = ci_schema_rehearsal.main(["--json"])
-    assert exit_code == 0
+    assert exit_code == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["skipped"] is True
 
@@ -123,3 +123,14 @@ def test_ci_schema_rehearsal_success_path(monkeypatch: pytest.MonkeyPatch, capsy
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["end_revision"] == "def"
+
+
+def test_ci_schema_rehearsal_fails_on_direct_db_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    error = OperationalError("select 1", {}, Exception("connection refused"))
+    monkeypatch.setattr(
+        ci_schema_rehearsal, "rehearse_schema", lambda **_: (_ for _ in ()).throw(error)
+    )
+    assert ci_schema_rehearsal.main(["--json"]) == 1
+    assert json.loads(capsys.readouterr().out)["skipped"] is True

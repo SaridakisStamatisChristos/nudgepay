@@ -1,4 +1,4 @@
-"""Run schema rehearsal with sensible defaults and graceful degradation."""
+"""Run schema rehearsal with test fixtures, failing if checks cannot execute."""
 from __future__ import annotations
 
 import argparse
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({"skipped": True, "reason": message}))
             else:
                 print(message, file=sys.stderr)
-            return 0
+            return 1
         payload = {"error": str(exc), "action": exc.action, "target": exc.target}
         if args.json:
             print(json.dumps(payload))
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"skipped": True, "reason": message}))
         else:
             print(f"{message} {exc}", file=sys.stderr)
-        return 0
+        return 1
 
     output = result.as_dict()
     if args.json:

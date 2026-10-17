@@ -6,6 +6,7 @@ surfacing real dependency issues.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -40,10 +41,8 @@ def _pip_audit_command() -> list[str]:
 def run_pip_audit() -> int:
     """Execute ``pip-audit`` and return the resulting exit code.
 
-    Network failures are treated as a soft failure so that offline
-    environments do not cause the entire CI job to fail. Any other
-    non-zero exit code is propagated so that genuine vulnerabilities are
-    still surfaced to developers.
+    Network failures can be skipped for offline local runs only.
+    CI must fail closed when the vulnerability database is unreachable.
     """
 
     result = subprocess.run(
@@ -67,6 +66,9 @@ def run_pip_audit() -> int:
     if any(fragment in combined_output for fragment in _NETWORK_ERROR_FRAGMENTS):
         if combined_output:
             sys.stderr.write(f"{combined_output}\n")
+        if os.environ.get("CI", "").lower() in {"1", "true", "yes"}:
+            sys.stderr.write("pip-audit failed closed: vulnerability database unavailable in CI.\n")
+            return result.returncode
         sys.stderr.write(
             "pip-audit skipped: unable to reach vulnerability service; "
             "treating as a transient network issue.\n"
