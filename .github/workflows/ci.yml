@@ -36,8 +36,7 @@ jobs:
 
     # Job-wide environment
     env:
-      # Use the service-mapped port to avoid collisions
-      DATABASE_URL: postgresql://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       TZ: UTC
       CI: "true"
 
