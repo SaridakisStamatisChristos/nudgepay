@@ -36,14 +36,11 @@ def test_rehearse_schema_seeds_environment(tmp_path, monkeypatch):
 
 def test_current_revision_uses_database_migration_state(tmp_path, monkeypatch):
     schema_lifecycle, _ = _reconfigure(tmp_path, monkeypatch)
-    assert schema_lifecycle._current_revision() is None
+    assert schema_lifecycle._current_revision() == "20240920_02"
 
     with schema_lifecycle.engine.begin() as connection:
         connection.exec_driver_sql(
-            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO alembic_version (version_num) VALUES ('20240920_02')"
+            "UPDATE alembic_version SET version_num = '20240910_01'"
         )
 
-    assert schema_lifecycle._current_revision() == "20240920_02"
+    assert schema_lifecycle._current_revision() == "20240910_01"
