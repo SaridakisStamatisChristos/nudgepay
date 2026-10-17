@@ -59,3 +59,10 @@ def apply_ci_environment_defaults() -> None:
 
     for key, value in _DEFAULT_ENV.items():
         os.environ.setdefault(key, value)
+
+
+if __name__ == "__main__":
+    # Emit GitHub Actions environment-file values without disclosing real secrets.
+    # Every credential here is a non-functional, test-only fixture.
+    for key, value in _DEFAULT_ENV.items():
+        print(f"{key}={value}")

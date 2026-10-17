@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +12,7 @@ from typing import Dict
 
 from alembic import command
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import MetaData, Table, func, select
 from sqlmodel import Session
 
@@ -88,15 +87,11 @@ def _alembic_config() -> Config:
     return config
 
 
-def _current_revision(config: Config) -> str | None:
-    buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
-        command.current(config, verbose=False)
-    output = buffer.getvalue().strip()
-    if not output:
-        return None
-    # Alembic may emit multiple revisions; take the last token.
-    return output.split()[-1]
+def _current_revision() -> str | None:
+    """Read the DB migration state directly, rather than parsing Alembic logs."""
+
+    with engine.connect() as connection:
+        return MigrationContext.configure(connection).get_current_revision()
 
 
 def _capture_snapshot_counts() -> Dict[str, int]:
@@ -135,7 +130,7 @@ def rehearse_schema(
     """Execute a downgrade/upgrade rehearsal and optionally reseed the environment."""
 
     config = _alembic_config()
-    start_revision = _current_revision(config)
+    start_revision = _current_revision()
     steps: list[RehearsalStep] = []
     seed_summary: SeedSummary | None = None
     snapshot_counts: Dict[str, int] = {}
@@ -180,7 +175,7 @@ def rehearse_schema(
 
         _execute("seed", "default-dataset", _seed_runner)
 
-    end_revision = _current_revision(config)
+    end_revision = _current_revision()
     downgrade_completed = any(
         step.action == "downgrade" and step.success for step in steps
     )

@@ -52,6 +52,7 @@ def test_run_pip_audit_network_issue(
     capsys: pytest.CaptureFixture[str],
     stderr: str,
 ) -> None:
+    monkeypatch.setenv("CI", "false")
     result = _FakeCompletedProcess(returncode=1, stdout="", stderr=stderr)
     _install_fake_run(monkeypatch, result)
 
@@ -72,3 +73,12 @@ def test_run_pip_audit_real_failure(monkeypatch: pytest.MonkeyPatch, capsys: pyt
     captured = capsys.readouterr()
     assert captured.out == "warning"
     assert captured.err.endswith("boom")
+
+
+def test_run_pip_audit_network_issue_fails_closed_in_ci(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("CI", "true")
+    _install_fake_run(monkeypatch, _FakeCompletedProcess(1, stderr="ProxyError: Network is unreachable"))
+    assert security_scan.run_pip_audit() == 1
+    assert "failed closed" in capsys.readouterr().err

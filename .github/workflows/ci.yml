@@ -39,41 +39,15 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       TZ: UTC
       CI: "true"
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/nudgepay
 
-      # Secrets — define them in GitHub → Settings → Secrets and variables → Actions
-      SESSION_SECRET_REF: env://SESSION_SECRET_VALUE
-      SESSION_SECRET_VALUE: ${{ secrets.SESSION_SECRET_VALUE }}
-      CRON_SECRET_REF: env://CRON_SECRET_VALUE
-      CRON_SECRET_VALUE: ${{ secrets.CRON_SECRET_VALUE }}
-      CRON_HMAC_SECRET_REF: env://CRON_HMAC_SECRET_VALUE
-      CRON_HMAC_SECRET_VALUE: ${{ secrets.CRON_HMAC_SECRET_VALUE }}
-      SERVICE_TOKEN_PEPPER_REF: env://SERVICE_TOKEN_PEPPER_VALUE
-      SERVICE_TOKEN_PEPPER_VALUE: ${{ secrets.SERVICE_TOKEN_PEPPER_VALUE }}
-      ADMIN_PASSWORD_HASH_REF: env://ADMIN_PASSWORD_HASH_VALUE
-      ADMIN_PASSWORD_HASH_VALUE: ${{ secrets.ADMIN_PASSWORD_HASH_VALUE }}
-      ADMIN_TOTP_SECRET_REF: env://ADMIN_TOTP_SECRET_VALUE
-      ADMIN_TOTP_SECRET_VALUE: ${{ secrets.ADMIN_TOTP_SECRET_VALUE }}
-      STRIPE_SECRET_KEY_REF: env://STRIPE_SECRET_KEY_VALUE
-      STRIPE_SECRET_KEY_VALUE: ${{ secrets.STRIPE_SECRET_KEY_VALUE }}
-      STRIPE_WEBHOOK_SECRET_REF: env://STRIPE_WEBHOOK_SECRET_VALUE
-      STRIPE_WEBHOOK_SECRET_VALUE: ${{ secrets.STRIPE_WEBHOOK_SECRET_VALUE }}
-      AUTOMATION_PAGERDUTY_SERVICE: nudgepay-automation
-      AUTOMATION_PAGERDUTY_ROUTING_KEY_REF: env://AUTOMATION_PAGERDUTY_ROUTING_KEY_VALUE
-      AUTOMATION_PAGERDUTY_ROUTING_KEY_VALUE: ${{ secrets.AUTOMATION_PAGERDUTY_ROUTING_KEY_VALUE }}
-      AUTOMATION_SLACK_CHANNEL: "#nudgepay-alerts"
-      AUTOMATION_SLACK_WEBHOOK_REF: env://AUTOMATION_SLACK_WEBHOOK_VALUE
-      AUTOMATION_SLACK_WEBHOOK_VALUE: ${{ secrets.AUTOMATION_SLACK_WEBHOOK_VALUE }}
-      AUTOMATION_EMAIL_RECIPIENTS: oncall@nudgepay.test
-      SECRET_ROTATION_RUNBOOK_TEMPLATE: https://runbooks.nudgepay.test/secret-rotation
-      SECRET_ROTATION_DASHBOARD_TEMPLATE: https://grafana.nudgepay.test/d/rotation
-      BASE_URL: https://staging.nudgepay.test
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -87,14 +61,11 @@ jobs:
       - name: Run CI (lint, tests, security, release checks)
         run: make ci
 
-      - name: Apply database migrations (retry until Postgres healthy)
-        run: |
-          for i in {1..10}; do
-            alembic upgrade head && s=0 && break || s=$?
-            echo "alembic failed (attempt $i), retrying in 3s..."
-            sleep 3
-          done
-          exit $s
+      - name: Export isolated test-only CI credentials
+        run: python scripts/ci_env.py >> "$GITHUB_ENV"
+
+      - name: Apply database migrations
+        run: python -m alembic upgrade head
 
       - name: Validate staging release configuration
         run: ENVIRONMENT=staging python -m nudgepay.scripts.validate_release

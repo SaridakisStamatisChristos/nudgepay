@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from typing import Iterable, Mapping
 
 import bcrypt
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlmodel import Session, delete, select
 
 from .db import init_db, session_scope
@@ -145,10 +145,11 @@ def _reset_tables(session: Session) -> None:
 def _ensure_admin_schema(session: Session) -> None:
     """Add missing admin columns when legacy migrations are incomplete."""
 
-    info = session.exec(text("PRAGMA table_info('adminuser')")).all()
-    if not info:
+    bind = session.get_bind()
+    inspector = inspect(bind)
+    if not inspector.has_table("adminuser"):
         return
-    existing = {row[1] for row in info}
+    existing = {column["name"] for column in inspector.get_columns("adminuser")}
     alterations: dict[str, str] = {
         "role": "ALTER TABLE adminuser ADD COLUMN role TEXT DEFAULT 'viewer'",
         "permissions": "ALTER TABLE adminuser ADD COLUMN permissions TEXT DEFAULT '[]'",
@@ -156,6 +157,15 @@ def _ensure_admin_schema(session: Session) -> None:
         "federated_providers": "ALTER TABLE adminuser ADD COLUMN federated_providers TEXT DEFAULT '[]'",
         "hardware_key_fingerprints": "ALTER TABLE adminuser ADD COLUMN hardware_key_fingerprints TEXT DEFAULT '[]'",
     }
+    missing = set(alterations) - existing
+    # Legacy SQLite snapshots can be repaired in place. On PostgreSQL, the
+    # JSON-backed fields need their migration-defined types, not TEXT columns.
+    if missing and bind.dialect.name != "sqlite":
+        raise RuntimeError(
+            "Admin schema is missing migrated columns: "
+            + ", ".join(sorted(missing))
+            + ". Apply the database migrations before seeding."
+        )
     for column, statement in alterations.items():
         if column not in existing:
             session.exec(text(statement))
