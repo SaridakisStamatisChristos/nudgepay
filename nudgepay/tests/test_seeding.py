@@ -24,3 +24,20 @@ def test_seed_environment_and_validate(tmp_path, monkeypatch):
     validation = seeding.validate_environment()
     assert validation["score"] == 1.0
     assert not validation["mismatches"]
+
+
+def test_ensure_admin_schema_reflects_legacy_sqlite_columns(tmp_path):
+    from sqlalchemy import create_engine, inspect, text
+    from sqlmodel import Session
+    from app import seeding
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE adminuser (id INTEGER PRIMARY KEY)"))
+
+    with Session(engine) as session:
+        seeding._ensure_admin_schema(session)
+        session.commit()
+
+    columns = {column["name"] for column in inspect(engine).get_columns("adminuser")}
+    assert {"role", "permissions", "external_id", "federated_providers", "hardware_key_fingerprints"} <= columns
