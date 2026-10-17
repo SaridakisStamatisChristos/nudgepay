@@ -43,9 +43,6 @@ jobs:
           cache: pip
           cache-dependency-path: nudgepay/requirements.txt
 
-      - name: Export isolated test-only CI credentials
-        run: python nudgepay/scripts/ci_env.py >> "$GITHUB_ENV"
-
       - name: Configure
         run: ./configure
 
