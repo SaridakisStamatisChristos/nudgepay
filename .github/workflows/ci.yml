@@ -39,6 +39,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       TZ: UTC
       CI: "true"
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/nudgepay
 
 
     steps:
@@ -63,14 +64,8 @@ jobs:
       - name: Export isolated test-only CI credentials
         run: python scripts/ci_env.py >> "$GITHUB_ENV"
 
-      - name: Apply database migrations (retry until Postgres healthy)
-        run: |
-          for i in {1..10}; do
-            alembic upgrade head && s=0 && break || s=$?
-            echo "alembic failed (attempt $i), retrying in 3s..."
-            sleep 3
-          done
-          exit $s
+      - name: Apply database migrations
+        run: python -m alembic upgrade head
 
       - name: Validate staging release configuration
         run: ENVIRONMENT=staging python -m nudgepay.scripts.validate_release

@@ -32,3 +32,18 @@ def test_rehearse_schema_seeds_environment(tmp_path, monkeypatch):
 
     validation = seeding.validate_environment()
     assert validation["score"] == 1.0
+
+
+def test_current_revision_uses_database_migration_state(tmp_path, monkeypatch):
+    schema_lifecycle, _ = _reconfigure(tmp_path, monkeypatch)
+    assert schema_lifecycle._current_revision() is None
+
+    with schema_lifecycle.engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO alembic_version (version_num) VALUES ('20240920_02')"
+        )
+
+    assert schema_lifecycle._current_revision() == "20240920_02"
